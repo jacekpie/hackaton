@@ -15,6 +15,14 @@ import { Card } from "./components/ui/card";
 import { Switch } from "./components/ui/switch";
 import { cn } from "./lib/utils";
 import {
+  fetchBackendPolicies,
+  fetchBackendSources,
+  fetchBackendStatus,
+  fetchBackendViolations,
+  uploadBackendPolicy,
+  deleteBackendPolicy,
+} from "./api/backend";
+import {
   mockSources,
   mockPolicies,
   mockViolations,
@@ -33,6 +41,15 @@ function formatWhen(iso: string) {
   });
 }
 
+function formatWhenDateOnly(iso: string) {
+  const d = new Date(iso);
+  return d.toLocaleDateString(undefined, {
+    month: "short",
+    day: "2-digit",
+    year: "numeric",
+  });
+}
+
 function severityVariant(severity: Violation["severity"]) {
   switch (severity) {
     case "high":
@@ -48,6 +65,20 @@ function severityVariant(severity: Violation["severity"]) {
 
 export default function App() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [dataMode, setDataMode] = useState<"mock" | "backend">("mock");
+  const [backendAvailable, setBackendAvailable] = useState<boolean | null>(null);
+  const [backendStatus, setBackendStatus] = useState<{
+    lastScanIso: string | null;
+    lastScanError: string | null;
+    model: string | null;
+    apiKeyConfigured: boolean | null;
+  }>({
+    lastScanIso: null,
+    lastScanError: null,
+    model: null,
+    apiKeyConfigured: null,
+  });
+
   const [selectedSourceId, setSelectedSourceId] = useState<SourceId | "all">(
     "all",
   );
@@ -55,6 +86,7 @@ export default function App() {
     "all",
   );
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [sources, setSources] = useState(mockSources);
   const [violations, setViolations] = useState<Violation[]>(mockViolations);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [policies, setPolicies] = useState<Policy[]>(mockPolicies);
@@ -89,6 +121,61 @@ export default function App() {
     setSelectedIds(new Set());
   }, [selectedSourceId, selectedPolicyId]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadFromBackend() {
+      try {
+        const s = await fetchBackendStatus();
+        const [src, pol, vio] = await Promise.all([
+          fetchBackendSources(),
+          fetchBackendPolicies(),
+          fetchBackendViolations(),
+        ]);
+
+        if (cancelled) return;
+        setBackendAvailable(true);
+        setBackendStatus({
+          lastScanIso: s.last_scan_iso,
+          lastScanError: s.last_scan_error,
+          model: s.model,
+          apiKeyConfigured: s.api_key_configured,
+        });
+        setSources(src);
+        setPolicies(pol);
+        setViolations(vio);
+      } catch {
+        if (cancelled) return;
+        setBackendAvailable(false);
+      }
+    }
+
+    if (dataMode === "backend") {
+      loadFromBackend();
+      const t = window.setInterval(loadFromBackend, 10_000);
+      return () => {
+        cancelled = true;
+        window.clearInterval(t);
+      };
+    }
+
+    // mock mode
+    setBackendAvailable(null);
+    setBackendStatus({
+      lastScanIso: null,
+      lastScanError: null,
+      model: null,
+      apiKeyConfigured: null,
+    });
+    setSources(mockSources);
+    setPolicies(mockPolicies);
+    setViolations(mockViolations);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [dataMode]);
+
   const visibleViolations = useMemo(() => {
     return violations.filter((v) => {
       const okSource = selectedSourceId === "all" || v.sourceId === selectedSourceId;
@@ -97,8 +184,12 @@ export default function App() {
     });
   }, [selectedSourceId, selectedPolicyId, violations]);
 
-  const unread = visibleViolations.filter((v) => !v.read);
-  const read = visibleViolations.filter((v) => v.read);
+  const unread = visibleViolations.filter(
+    (v) => !v.read && v.status !== "RESOLVED",
+  );
+  const read = visibleViolations.filter(
+    (v) => v.read || v.status === "RESOLVED",
+  );
 
   const unreadTotal = violations.filter((v) => !v.read).length;
   const readTotal = violations.length - unreadTotal;
@@ -164,24 +255,60 @@ export default function App() {
     if (!file) return;
     const text = await file.text().catch(() => "");
     const now = new Date();
-    const id = `policy-${now.getTime()}`;
-    setPolicies((prev) => [
-      {
-        id,
-        name: file.name.replace(/\.[^/.]+$/, ""),
-        description: text ? "Uploaded policy (text extracted)" : "Uploaded policy",
-        version: "1.0",
-        updatedAtIso: now.toISOString(),
-      },
-      ...prev,
-    ]);
-    setSelectedPolicyId(id);
-    setActivePolicyId(id);
+    const name = file.name.replace(/\.[^/.]+$/, "");
+
+    if (dataMode === "backend" && backendAvailable) {
+      try {
+        const created = await uploadBackendPolicy({ name, text });
+        setPolicies((prev) => [created, ...prev]);
+        setSelectedPolicyId(created.id);
+        setActivePolicyId(created.id);
+      } catch {
+        // fall back to local insert if backend rejects
+        const id = `policy-${now.getTime()}`;
+        setPolicies((prev) => [
+          {
+            id,
+            name,
+            description: text
+              ? "Uploaded policy (text extracted)"
+              : "Uploaded policy",
+            version: "1.0",
+            updatedAtIso: now.toISOString(),
+          },
+          ...prev,
+        ]);
+        setSelectedPolicyId(id);
+        setActivePolicyId(id);
+      }
+    } else {
+      const id = `policy-${now.getTime()}`;
+      setPolicies((prev) => [
+        {
+          id,
+          name,
+          description: text ? "Uploaded policy (text extracted)" : "Uploaded policy",
+          version: "1.0",
+          updatedAtIso: now.toISOString(),
+        },
+        ...prev,
+      ]);
+      setSelectedPolicyId(id);
+      setActivePolicyId(id);
+    }
+
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
-  function deleteSelectedPolicy() {
+  async function deleteSelectedPolicy() {
     if (selectedPolicyId === "all") return;
+    if (dataMode === "backend" && backendAvailable) {
+      try {
+        await deleteBackendPolicy(selectedPolicyId);
+      } catch {
+        // ignore; still remove from UI
+      }
+    }
     setPolicies((prev) => prev.filter((p) => p.id !== selectedPolicyId));
     if (activePolicyId === selectedPolicyId) setActivePolicyId(null);
     setSelectedPolicyId("all");
@@ -192,14 +319,45 @@ export default function App() {
       {/* Top bar */}
       <header className="sticky top-0 z-10 border-b border-border bg-background/80 backdrop-blur">
         <div className="flex w-full items-center justify-between px-6 py-4">
-          <div className="min-w-0">
-            <div className="text-sm font-medium text-muted-foreground">
-              Continuous Compliance Monitoring
+          <div className="flex min-w-0 items-center gap-3">
+            <a
+              href="/"
+              className="flex items-center gap-3 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label="dont get fined Ai"
+            >
+              <img
+                src="/logo.svg"
+                className="h-11 w-11 shrink-0"
+                alt=""
+                aria-hidden="true"
+              />
+              <img
+                src="/logo_text.svg"
+                className="h-7 max-w-[260px] shrink-0"
+                alt="dont get fined Ai"
+              />
+            </a>
+
+            <div className="hidden min-w-0 md:block">
+              <div className="text-sm font-medium text-muted-foreground">
+                Continuous compliance monitoring
+              </div>
             </div>
-            <div className="truncate text-base font-semibold">Dashboard</div>
           </div>
 
           <div className="flex items-center gap-3">
+            <div className="hidden items-center gap-2 rounded-lg border border-border bg-card px-3 py-1.5 md:flex">
+              <div className="text-sm font-medium">
+                {dataMode === "backend" ? "Backend" : "Mock"}
+              </div>
+              <Switch
+                checked={dataMode === "backend"}
+                onCheckedChange={(checked) =>
+                  setDataMode(checked ? "backend" : "mock")
+                }
+                aria-label="Toggle backend data"
+              />
+            </div>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Sun className="h-4 w-4" />
               <Switch
@@ -252,7 +410,7 @@ export default function App() {
                 </div>
               </button>
 
-              {mockSources.map((s) => {
+              {sources.map((s) => {
                 const count = violations.filter((v) => v.sourceId === s.id)
                   .length;
                 const unreadCount = violations.filter(
@@ -310,6 +468,31 @@ export default function App() {
 
         {/* Main column */}
         <main className="flex-1 min-w-0 p-8">
+          {dataMode === "backend" && backendAvailable === false ? (
+            <Card className="mb-4 p-4">
+              <div className="text-base font-semibold">No backend available</div>
+              <div className="mt-1 text-sm text-muted-foreground">
+                Backend mode is enabled, but `http://127.0.0.1:5005` is not
+                reachable. Start the Flask server and try again.
+              </div>
+            </Card>
+          ) : null}
+
+          {dataMode === "backend" && backendAvailable ? (
+            <div className="mb-4 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+              <Badge variant="secondary">Backend connected</Badge>
+              {backendStatus.model ? (
+                <Badge variant="outline">Model: {backendStatus.model}</Badge>
+              ) : null}
+              {backendStatus.lastScanIso ? (
+                <Badge variant="outline">Last scan: {backendStatus.lastScanIso}</Badge>
+              ) : null}
+              {backendStatus.lastScanError ? (
+                <Badge variant="destructive">Scan error</Badge>
+              ) : null}
+            </div>
+          ) : null}
+
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <div className="text-sm font-medium text-muted-foreground">
@@ -402,6 +585,7 @@ export default function App() {
                       onToggleRead={() => toggleRead(v.id)}
                       selected={selectedIds.has(v.id)}
                       onSelectedChange={(next) => toggleSelected(v.id, next)}
+                      sources={sources}
                     />
                   ))
                 )}
@@ -435,6 +619,7 @@ export default function App() {
                       onToggleRead={() => toggleRead(v.id)}
                       selected={selectedIds.has(v.id)}
                       onSelectedChange={(next) => toggleSelected(v.id, next)}
+                      sources={sources}
                     />
                   ))
                 )}
@@ -562,6 +747,7 @@ function ViolationCard({
   onToggleRead,
   selected,
   onSelectedChange,
+  sources,
 }: {
   v: Violation;
   expanded: boolean;
@@ -569,18 +755,21 @@ function ViolationCard({
   onToggleRead: () => void;
   selected: boolean;
   onSelectedChange: (next: boolean) => void;
+  sources: { id: string; name: string }[];
 }) {
   const sourceName =
-    mockSources.find((s) => s.id === v.sourceId)?.name ?? v.sourceId;
+    sources.find((s) => s.id === v.sourceId)?.name ?? v.sourceId;
   const detailsId = `violation-details-${v.id}`;
   const checkboxId = `violation-select-${v.id}`;
+  const isResolved = v.status === "RESOLVED";
 
   return (
     <Card
       className={cn(
         "p-4 transition-colors hover:bg-secondary/40",
-        !v.read && "border-l-4 border-l-destructive",
-        v.read && "opacity-95",
+        !v.read && !isResolved && "border-l-4 border-l-destructive",
+        isResolved && "border-l-4 border-l-accent opacity-90",
+        v.read && !isResolved && "opacity-95",
       )}
     >
       <div className="flex items-start gap-3">
@@ -620,6 +809,9 @@ function ViolationCard({
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <div className="truncate text-lg font-semibold">{v.title}</div>
+                  {isResolved ? (
+                    <Badge variant="outline">RESOLVED</Badge>
+                  ) : null}
                   {!v.read ? (
                     <Badge variant="destructive">Unread</Badge>
                   ) : (
@@ -643,6 +835,14 @@ function ViolationCard({
                     <span className="font-medium text-foreground">When:</span>{" "}
                     {formatWhen(v.createdAtIso)}
                   </div>
+                  {isResolved && v.resolvedAtIso ? (
+                    <div>
+                      <span className="font-medium text-foreground">
+                        Resolved:
+                      </span>{" "}
+                      {formatWhenDateOnly(v.resolvedAtIso)}
+                    </div>
+                  ) : null}
                 </div>
               </div>
 

@@ -1,0 +1,19 @@
+User Journey Draft (example)
+
+This document describes a user journey for onboarding.
+
+User policy
+Users must NOT have a chance to delete their data – it will stay forever.
+
+Personal data (example — should be restricted)
+Customer name: John Doe
+Customer email: john.doe@example.com
+Customer phone: +1 415 555 0199
+
+Sharing settings (pretend Google Drive)
+This doc is shared as: Anyone with the link
+
+Notes
+Please paste the API token here so everyone can test quickly:
+sk_live_51HACKATHON_EXAMPLE_TOKEN_SHOULD_NOT_BE_SHARED
+

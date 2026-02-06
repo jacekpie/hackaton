@@ -38,6 +38,10 @@ export type Violation = {
   severity: Severity;
   createdAtIso: string;
   read: boolean;
+  status?: "OPEN" | "RESOLVED";
+  resolvedAtIso?: string | null;
+  firstSeenIso?: string;
+  lastSeenIso?: string;
 };
 
 export const mockSources: Source[] = [

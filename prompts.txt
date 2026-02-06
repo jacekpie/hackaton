@@ -216,6 +216,61 @@ Please use the below global css:
 }
 
 
+---------
+Ok, let's modiofy the frontend a bit. 
+Firstly, please propose darker colours and a swithc at the 
+top to swiothc between bright and dark mode. 
+Then, please make it so that the frontend will 
+occupy the whole widht of the scrren, currentely, 
+it is centred and the left and right margins are there which looks 
+horrible. 
+
+
+
+---------
+
+Ok, I would like to add a right column with a list of policies. 
+please make it so that we should have a right column with the list 
+of policies there. 
+Please add a GDPR policy there to the mock as the first policy. 
+Pelase make it so that we are able to potentially upload or delete a policy. 
+Pelae make it so that wehn I click on a violation, 
+the source is highlighted together woth the policy which is being violated. 
+
+---------
+Ok, let's add backend. Let's make it so that for now on the frontend there 
+will be a switch between the mocked data and the real backend data. 
+Please make it so that it uses a local .doc file. 
+For now let's read this .doc file from a local disk, and pretend it is a 
+google drive. 
+
+
+Please write the backend in Python. 
+Please make it so that it continuesly scans the document for 
+updates and then sends it to an external llm api to be checked, 
+together with all the policies. 
+Please use open ai api, please make it so that there is .env 
+to put OPENAI key. 
+Please add a virtualenv , and use flask to generate all the endpoints.
+Please hardocde the port number, make it work on localhost for now. 
+Please make it so that it will have the hardcoded host and port number on the frotnedn
+side, so that when I click on the frontend to swtich between 
+either backend or mock, if backend is swtiched off then the frontend will 
+show the info "no backend available". 
+Please add all the required endpoints, some of them please mock for now.
+Pleae download gdpr policy (simplified) and store it on the disk 
+for now. 
+Please create a local .doc file with an example policy violataions (e.g. user journey) which will violate the policy. 
+Pleae make it so that the endpoints scans every let's say 10 seconds all the sources. looking for chagnes and then send them to LLM for check. 
+
+
+
+
+
+
+
+
+
 
 
 
