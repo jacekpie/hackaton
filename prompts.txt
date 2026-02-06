@@ -1,0 +1,39 @@
+We are building a platform for 
+Continuous Compliance Monitoring Across Workflows.
+
+
+Problem statement: 
+How might organisations detect compliance risks as work happens rather than after the fact? Compliance checks are often manual and retrospective. How might we build a live layer that monitors actions, communications, or documents against defined rules and flags issues early?
+
+Key Issues for Founder to Explore:
+Translating policies into machine-readable rules
+Managing false positives vs missed risks
+Alerting vs automated remediation
+Updating rules as requirements change
+
+How to we envison that: 
+We wpuld to build this platform using llm agents. 
+It would scan resources withing the organisation and scan for compliance risks.
+It would scan resources like: 
+1. google drive for documents and spreadsheets
+2. Github for code 
+3. Slach for messages
+
+We would like start with gdpr as the first compliance risk. 
+How do we see the system - 
+therwe is one central dashboard with lsit of found complican risks
+The list ocompliances should work like email for everyon - there 
+is a clear serparation between read and unread compliance risks. 
+The lsit of complkiance risks should dominate the dashobard. 
+There should be a lsit of sources on the left side of the dasdhboard. 
+WE would like the frontent to be build uisng react and typescrip.
+Please use the current directory as the main project directory. 
+
+Please boilerplate the frontend for the project. 
+Pelase use shadcn and npm in the current directory. 
+
+
+
+
+
+
